@@ -16,13 +16,13 @@ namespace TSLabBot
     /// </summary>
     public class BotDonchianTrend : IExternalScript
     {
-        #region Настроечные параметры бота
+        #region === Настроечные параметры бота ===
         // режим работы бота
-        RegimeBot regim = RegimeBot.On;
+        //public EnumOptimProperty RegimeBot = new EnumOptimProperty(TSLabBot.RegimeBot.On);
+        RegimeBot _regimeBot = RegimeBot.On;
 
         // период канала
         public IntOptimProperty PeriodChannel = new IntOptimProperty(50, 10, 100, 5);
-
 
         // проскальзывание в шагах цены
         public IntOptimProperty Slippage = new IntOptimProperty(20, 1, 500, 1);
@@ -37,7 +37,7 @@ namespace TSLabBot
         public BoolOptimProperty OnStopLoss = new BoolOptimProperty(false);
 
         // тип стоп-лосса 
-        StopType stopType = StopType.Stop;
+        StopType _stopType = StopType.Stop;
 
         // размер стоп-лоса в процентах
         public IntOptimProperty StopLossPct = new IntOptimProperty(5, 1, 10, 1);
@@ -55,7 +55,7 @@ namespace TSLabBot
         public IntOptimProperty TakeProfitPct = new IntOptimProperty(5, 1, 10, 1);
         #endregion
 
-        #region Общие параметры бота
+        #region === Общие параметры бота ===
         // константа для сравнения чисел c плавающей точкой
         private const double Eps = 1E-7;
 
@@ -74,7 +74,7 @@ namespace TSLabBot
             var sw = Stopwatch.StartNew();
 
             #region расчет индикаторов
-            IList<double> upChannel = ctx.GetData("UpChannel",
+            IList<double> upChannel = ctx.GetData("UpChannel", 
                 new string[] { PeriodChannel.ToString() },
                 () => Series.Highest(sec.HighPrices, PeriodChannel));
 
@@ -145,8 +145,8 @@ namespace TSLabBot
                                     pos.CloseAtPriceSlip(i + 1, closePrices[i], Slippage, "LX");
 
                                     // условие реверса позиции
-                                    if (regim != RegimeBot.OnlyShort &&
-                                        regim != RegimeBot.OnlyClosePosition)
+                                    if (_regimeBot != RegimeBot.OnlyShort &&
+                                        _regimeBot != RegimeBot.OnlyClosePosition)
                                     {
                                         // открытие шорта по лимиту для реверса позиции
                                         sec.SellAtPriceSlip(i + 1, 1, closePrices[i], Slippage, "SE");
@@ -175,8 +175,8 @@ namespace TSLabBot
                                     pos.CloseAtPriceSlip(i + 1, closePrices[i], Slippage, "SX");
 
                                     // условие реверса позиции
-                                    if (regim != RegimeBot.OnlyShort &&
-                                        regim != RegimeBot.OnlyClosePosition)
+                                    if (_regimeBot != RegimeBot.OnlyShort &&
+                                        _regimeBot != RegimeBot.OnlyClosePosition)
                                     {
                                         // открытие лонга по лимиту для реверса позиции
                                         sec.BuyAtPriceSlip(i + 1, 1, closePrices[i], Slippage, "LE");
@@ -206,7 +206,7 @@ namespace TSLabBot
                 }
                 #endregion
 
-                if (regim == RegimeBot.OnlyClosePosition)
+                if (_regimeBot == RegimeBot.OnlyClosePosition)
                     continue;
 
                 #region Вход в первую позицию
@@ -214,12 +214,12 @@ namespace TSLabBot
                 if (openPositions.Count == 0)
                 {
                     // лонг
-                    if (signalLE && regim != RegimeBot.OnlyShort)
+                    if (signalLE && _regimeBot != RegimeBot.OnlyShort)
                     {
                         sec.BuyAtPriceSlip(i + 1, 1, closePrices[i], Slippage, "LE");
                     }
                     // шорт
-                    else if (signalSE && regim != RegimeBot.OnlyLong)
+                    else if (signalSE && _regimeBot != RegimeBot.OnlyLong)
                     {
                         sec.SellAtPriceSlip(i + 1, 1, closePrices[i], Slippage, "SE");
                     }
@@ -289,10 +289,10 @@ namespace TSLabBot
             if (OnStopLoss || OnBreakevenStop)
             {
                 // вычисляем обычный стоп-лосс
-                if (OnStopLoss && stopType == StopType.Stop)
+                if (OnStopLoss && _stopType == StopType.Stop)
                     stopPrice = pos.GetStopPrice(StopLossPct);
                 // вычисляем трейл-стоп
-                else if (OnStopLoss && stopType == StopType.Trail)
+                else if (OnStopLoss && _stopType == StopType.Trail)
                     stopPrice = _trailStopHnd.Execute(pos, numBar);
                 
                 // вычисляем стоп для перевода позиции в безубыток

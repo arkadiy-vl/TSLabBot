@@ -11,7 +11,12 @@ using TSLab.Script.Optimization;
 
 namespace TSLabBot
 {
-    public class Bot2MA : IExternalScript
+    /// <summary>
+    /// Трендовый бот по двум скользящим средним
+    /// с возможностью добавления позиции при достижении заданного профита
+    /// с возможность выхода по стоплосу и тейкпрофиту
+    /// </summary>
+    public class Bot2SMA : IExternalScript
     {
 
         # region === Параметры робота ===
@@ -19,24 +24,25 @@ namespace TSLabBot
         public IntOptimProperty PeriodSlowMA = new IntOptimProperty(100, 20, 200, 10);
         public IntOptimProperty SizeStopLoss = new IntOptimProperty(5, 1, 10, 1);
         public IntOptimProperty SizeTakeProfit = new IntOptimProperty(5, 1, 10, 1);
+        public BoolOptimProperty OnStopLoss = new BoolOptimProperty(true);
+        public BoolOptimProperty OnTakeProfit = new BoolOptimProperty(true);
+        public BoolOptimProperty OnAddPos = new BoolOptimProperty(true);
+        public IntOptimProperty SizeProfitAddPos = new IntOptimProperty(2, 2, 10 ,2);
+        public OptimProperty CommissionPct = new OptimProperty(0.1, 0.05, 0.2, 0.01 );
 
         // не понятно как сделать перечисление оптимизируемым параметром 
-        //public EnumOptimProperty Regim = new EnumOptimProperty(RegimeBot.On);
+        //public EnumOptimProperty Regim = new EnumOptimProperty(RegimeBot.On, false);
 
         // режим работы бота
-        RegimeBot regim = RegimeBot.On;
-
-        // включить стоп лосс
-        bool onStopLoss = true;
-
-        // включить тейк профит
-        bool onTakeProfit = true;
+        RegimeBot _regimeBot = RegimeBot.On;
         #endregion
 
         public void Execute(IContext ctx, ISecurity sec)
         {
-            // запуск таймера для определения времени выполнения скрипта
             var sw = Stopwatch.StartNew();
+
+            if (PeriodFastMA.Value >= PeriodSlowMA.Value)
+                return;
 
             // расчет индикаторов c кэшированием
             IList<double> fastMA = ctx.GetData("MA", new string[] { PeriodFastMA.ToString() },
@@ -64,14 +70,19 @@ namespace TSLabBot
             var arrSignalSE = new double[barsCount];
 
             // кубик доход
-            var profitHandler = new TSLab.Script.Handlers.ProfitPct() { };
+            var profitPctHandler = new TSLab.Script.Handlers.ProfitPct(){};
+
+            // комиссия
+            var relCommisionHandler = new TSLab.Script.Handlers.RelativeCommission();
+            relCommisionHandler.CommissionPct = CommissionPct.Value;
+            relCommisionHandler.Execute(sec);
 
             //--------------
             // Торговый цикл
             //--------------
             for (int i = startBar; i < barsCount; i++)
             {
-                if (regim == RegimeBot.Off)
+                if (_regimeBot == RegimeBot.Off)
                     break;
 
                 if (PeriodFastMA >= PeriodSlowMA)
@@ -100,7 +111,7 @@ namespace TSLabBot
                 // условия входа в лонг
                 if (longPosition == null)
                 {
-                    if (signalLE && regim != RegimeBot.OnlyShort && regim != RegimeBot.OnlyClosePosition)
+                    if (signalLE && _regimeBot != RegimeBot.OnlyShort && _regimeBot != RegimeBot.OnlyClosePosition)
                     {
                         sec.Positions.BuyAtMarket(i + 1, 1, "LE");
                     }
@@ -109,12 +120,12 @@ namespace TSLabBot
                 else
                 {
                     // получаем профит по позиции
-                    var profit = profitHandler.Execute(longPosition, i);
+                    var profitPct = profitPctHandler.Execute(longPosition, i);
                     
                     // если профит более определенной величины, то добавляем позицию
-                    if(profit > 2 && longPositionAdd == null)
+                    if(OnAddPos && profitPct > SizeProfitAddPos && longPosition.Shares <= 2)
                     {
-                        longPosition.ChangeAtMarket(i + 1, longPosition.SharesOrigin + 1, "LA");
+                        longPosition.ChangeAtMarket(i + 1, longPosition.Shares + 1, "LA");
                     }
 
                     if (signalSE)
@@ -125,7 +136,7 @@ namespace TSLabBot
                 // условия входа в шорт
                 if (shortPosition == null)
                 {
-                    if (signalSE && regim != RegimeBot.OnlyLong && regim != RegimeBot.OnlyClosePosition)
+                    if (signalSE && _regimeBot != RegimeBot.OnlyLong && _regimeBot != RegimeBot.OnlyClosePosition)
                     {
                         sec.Positions.SellAtMarket(i + 1, 1, "SE");
                     }
@@ -134,10 +145,10 @@ namespace TSLabBot
                 else
                 {
                     // получаем профит по позиции
-                    var profit = profitHandler.Execute(shortPosition, i);
+                    var profitPct = profitPctHandler.Execute(shortPosition, i);
 
                     // если профит более определенной величины, то добавляем позицию до двух контрактов
-                    if (profit > 2 && shortPositionAdd == null)
+                    if (OnAddPos && profitPct > SizeProfitAddPos && shortPosition.Shares < 2)
                     {
                         shortPosition.ChangeAtMarket(i + 1, -1 * shortPosition.Shares - 1, "SA");
                     }
@@ -149,14 +160,14 @@ namespace TSLabBot
                 }
 
                 // выставление стоп лосса
-                if(onStopLoss)
+                if(OnStopLoss.Value)
                 {
                     longPosition?.CloseAtStop(i + 1, longPosition.EntryPrice * (1 - SizeStopLoss/100.0), "LXS");
                     shortPosition?.CloseAtStop(i + 1, shortPosition.EntryPrice * (1 + SizeStopLoss/100.0), "SXS");
                 }
 
                 // выставление тейк профита
-                if(onTakeProfit)
+                if(OnTakeProfit.Value)
                 {
                     longPosition?.CloseAtProfit(i + 1, longPosition.EntryPrice * (1 + SizeTakeProfit/100.0), "LXP");
                     shortPosition?.CloseAtProfit(i + 1, shortPosition.EntryPrice * (1 - SizeTakeProfit/100.0), "SXP");
@@ -170,57 +181,57 @@ namespace TSLabBot
                 return;
             }
 
-            //--------------------
-            // Прорисовка графиков
+            #region ===Прорисовка графиков===
             //--------------------
             IGraphPane pane = ctx.First ?? ctx.CreateGraphPane("First", "First");
             Color colorCandle = ScriptColors.Black;
             
-            pane.AddList(sec.Symbol, 
+            var graphSec = pane.AddList(sec.Symbol, 
                 sec, 
                 CandleStyles.BAR_CANDLE,
                 colorCandle,
                 PaneSides.RIGHT);
             
-            var lineFastSma = pane.AddList(String.Format("FastMA ({0})", PeriodFastMA),
+            var graphFastSma = pane.AddList(String.Format("FastMA ({0})", PeriodFastMA),
                 fastMA,
                 ListStyles.LINE,
                 ScriptColors.Red,
                 LineStyles.SOLID,
                 PaneSides.RIGHT);
             
-            var lineSlowSma = pane.AddList(String.Format("SlowMA ({0})", PeriodSlowMA),
+            var graphSlowSma = pane.AddList(String.Format("SlowMA ({0})", PeriodSlowMA),
                 slowMA,
                 ListStyles.LINE,
                 ScriptColors.Blue,
                 LineStyles.SOLID,
                 PaneSides.RIGHT);
 
-            var lineSignalLE = pane.AddList("Signal LE",
+            var graphSignalLE = pane.AddList("Signal LE",
                 arrSignalLE,
                 ListStyles.HISTOHRAM,
                 ScriptColors.Green,
                 LineStyles.SOLID,
                 PaneSides.LEFT);
 
-            var lineSignalSE = pane.AddList("Signal SE",
+            var graphignalSE = pane.AddList("Signal SE",
                 arrSignalSE,
                 ListStyles.HISTOHRAM,
                 ScriptColors.Red,
                 LineStyles.SOLID,
                 PaneSides.LEFT);
 
+            // раскрашиваем бары в зависимости от наличия позиции
+            for (int i = 0; i < barsCount; i++)
+            {
+                var activePositions = sec.Positions.GetActiveForBar(i);
+                graphSec.SetColor(i, activePositions.Any() ? ScriptColors.Black : ScriptColors.DarkGray);
+            }
+            #endregion
 
-            //Вывод в лог
-            if (!ctx.Runtime.IsAgentMode) // пишем в лог только в режиме Лаборатория
-                ctx.LogInfo($"Скрипт выполнен за время: {sw.Elapsed}");
-
-            //var args = new Dictionary<string, object> { { "agent", ctx.Runtime.TradeName } };
-            //ctx.Log("Скрипт выполнен", MessageType.Info, true, args);
+           
 
         }
-
-        enum RegimeBot
+        public enum RegimeBot
         {
             On,
             Off,
@@ -228,5 +239,8 @@ namespace TSLabBot
             OnlyShort,
             OnlyClosePosition
         }
+
     }
+
+   
 }

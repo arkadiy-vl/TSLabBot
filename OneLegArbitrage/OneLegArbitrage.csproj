@@ -4,12 +4,12 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{30ACF3F9-920D-43EF-BE99-0ABA1F87C543}</ProjectGuid>
+    <ProjectGuid>{3CDA8B13-4BDA-41FF-8F87-9F51AC687C19}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>SampleScript</RootNamespace>
-    <AssemblyName>SampleScript</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <RootNamespace>OneLegArbitrage</RootNamespace>
+    <AssemblyName>OneLegArbitrage</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
@@ -33,7 +33,6 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -54,7 +53,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Bot2SMA.cs" />
+    <Compile Include="OneLegArbitrage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TradeHelper.cs" />
   </ItemGroup>

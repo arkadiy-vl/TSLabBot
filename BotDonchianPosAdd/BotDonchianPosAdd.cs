@@ -8,7 +8,7 @@ using TSLab.Script.Handlers;
 using TSLab.Script.Helpers;
 using TSLab.Script.Optimization;
 
-namespace BotDonchianPosAdd
+namespace TSLabBot
 {
     // Скрипт может входить только в лонг.
     // По пробою канала дончиана на базовом таймфрейме, входим в лонг.
