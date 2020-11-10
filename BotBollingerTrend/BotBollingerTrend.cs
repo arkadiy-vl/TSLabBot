@@ -20,12 +20,17 @@ namespace BotBollingerTrend
         public IntOptimProperty PeriodBollinger = new IntOptimProperty(50, 10, 100, 5);
         public OptimProperty DeviationBollinger = new OptimProperty(1.5, 1, 2.5, 0.1);
         
-        // объем входа в позицию в процентах
+        // объем входа в позицию в процентах от начального депозита
         public IntOptimProperty VolumePct = new IntOptimProperty(50, 10, 300, 10);
 
         // режим входа в позицию фиксированным объемом
-        public BoolOptimProperty OnVolumeFixed = new BoolOptimProperty(true);
-        public OptimProperty VolumeFixed = new OptimProperty(1.0, 1.0, 100.0, 1.0);
+        public BoolOptimProperty OnVolumeFix = new BoolOptimProperty(true);
+
+        // объем входа в позицию фиксированным объемом (в акциях, контрактах)
+        public OptimProperty VolumeFix = new OptimProperty(1.0, 1.0, 100.0, 1.0);
+
+        // количество знаков после запятой для объема
+        public IntOptimProperty VolumeDecimals = new IntOptimProperty(0, 1, 10, 1);
 
         // метод выхода из позиции: 1 - по противоположной границе канала, 2- по центру канала
         public IntOptimProperty MethodOutOfPosition = new IntOptimProperty(1, 1, 2, 1);
@@ -36,9 +41,9 @@ namespace BotBollingerTrend
         
         // проскальзывание
         public IntOptimProperty Slippage = new IntOptimProperty(100, 0, 500, 10);
-        
-        // количество знаков после запятой для объема
-        public IntOptimProperty VolumeDecimals = new IntOptimProperty(0, 1, 10, 1);
+
+        // шаг цены
+        public OptimProperty PriceStep = new OptimProperty(0.01, 0.001, 1, 0.001);
 
         // размер комиссии
         public OptimProperty CommissionPct = new OptimProperty(0.1, 0, 0.2, 0.01);
@@ -83,7 +88,7 @@ namespace BotBollingerTrend
             if (ctx.Runtime.IsAgentMode)
                 _tick = sec.Tick;
             else
-                _tick = sec.Tick;
+                _tick = PriceStep.Value;
 
             // расчет комиссии - комиссия относительная
             sec.Commission = (pos, price, shares, isEntry, isPart) =>
@@ -210,9 +215,9 @@ namespace BotBollingerTrend
                 {
                     if (signalLE)
                     {
-                        if (OnVolumeFixed.Value)
+                        if (OnVolumeFix.Value)
                         {
-                            volume = VolumeFixed.Value;
+                            volume = VolumeFix.Value;
                         }
                         else
                         {
@@ -261,9 +266,9 @@ namespace BotBollingerTrend
                 {
                     if (signalSE)
                     {
-                        if (OnVolumeFixed.Value)
+                        if (OnVolumeFix.Value)
                         {
-                            volume = VolumeFixed.Value;
+                            volume = VolumeFix.Value;
                         }
                         else
                         {
@@ -372,7 +377,10 @@ namespace BotBollingerTrend
             // начальное значение депозита
             double deposit = sec.InitDeposit;
 
+            return deposit;
+
             // вычисляем текущее значение депозита,
+            // не используется в данном роботе
             foreach (IPosition pos in sec.Positions.GetClosedOrActiveForBar(bar))
             {
                 if (pos.IsActiveForBar(bar))

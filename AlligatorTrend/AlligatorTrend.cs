@@ -29,8 +29,14 @@ namespace AlligatorTrend
         // отклонение цены для входа в дополнительную позицию
         public OptimProperty DeviationPriceForAddEnter = new OptimProperty(1, 1, 10, 1);
 
-        // объем входа в позицию
-        public OptimProperty Volume = new OptimProperty(0.1, 0.1, 100, 0.1);
+        // режим входа в позицию фиксированным объемом
+        public BoolOptimProperty OnVolumeFix = new BoolOptimProperty(true);
+
+        // объем входа в позицию фиксированным объемом (в акциях/контрактах)
+        public OptimProperty VolumeFix = new OptimProperty(0.1, 0.1, 100, 0.1);
+
+        // объем входа в позицию в процентах от начального депозита
+        public IntOptimProperty VolumePct = new IntOptimProperty(50, 10, 300, 10);
 
         // проскальзывание
         public IntOptimProperty Slippage = new IntOptimProperty(100, 0, 500, 10);
@@ -40,6 +46,9 @@ namespace AlligatorTrend
         
         // шаг цены
         public OptimProperty PriceStep = new OptimProperty(0.01, 0.001, 1, 0.001);
+
+        // количество знаков после запятой для объема
+        public IntOptimProperty VolumeDecimals = new IntOptimProperty(0, 1, 10, 1);
 
         #endregion
 
@@ -69,9 +78,6 @@ namespace AlligatorTrend
         private double _lastFastAlligator;
         private double _lastMiddleAlligator;
         private double _lastSlowAlligator;
-        private double _prevFastAlligator;
-        private double _prevMiddleAlligator;
-        private double _prevSlowAlligator;
 
         // торговые сигналы
         private bool _signalLE = false;
@@ -222,6 +228,12 @@ namespace AlligatorTrend
                 // получаем все открытые позиции 
                 var positions = _sec.Positions.GetActiveForBar(i).ToList();
 
+                // получаем все позиции лонг
+                var longPositions = _sec.Positions.GetActiveForBar(i).ToList().FindAll(pos => pos.IsLong);
+
+                // получаем все позиции лонг
+                var shortPositions = _sec.Positions.GetActiveForBar(i).ToList().FindAll(pos => pos.IsShort);
+
                 // для каждой позиции проверяем условия её закрытия
                 for (int j= 0; positions != null && j < positions.Count; j++)
                 {
@@ -258,14 +270,14 @@ namespace AlligatorTrend
                     _lastFastAlligator > _lastMiddleAlligator &&
                     _lastMiddleAlligator > _lastSlowAlligator)
                 {
-                    TryOpenLong(i);
+                    TryOpenLong(i, longPositions);
                 }
                 // проверка условия открытия позиции шорт
                 else if (_lastPrice < _lastFastAlligator &&
                          _lastFastAlligator < _lastMiddleAlligator &&
                          _lastMiddleAlligator < _lastSlowAlligator)
                 {
-                    TryOpenShort(i);
+                    TryOpenShort(i, shortPositions);
                 }
 
                 // сохраняем сигналы для вывода на график
@@ -320,10 +332,9 @@ namespace AlligatorTrend
                 signalName);
         }
 
-        private void TryOpenLong(int bar)
+        private void TryOpenLong(int bar, IList<IPosition> longPositions)
         {
-            // получаем все позиции лонг
-            var longPositions = _sec.Positions.GetActiveForBar(bar).ToList().FindAll(pos => pos.IsLong);
+            
 
             // Если лонг позиций нет, то открываем лонг позицию
             if (longPositions.Count == 0)
@@ -367,15 +378,13 @@ namespace AlligatorTrend
         private void OpenLong(int bar, string signal)
         {
             double pricePosition = _lastPrice + Slippage * _tick;
+            double volume = GetVolume(_sec, bar, pricePosition);
 
-            _sec.Positions.BuyAtPrice(bar + 1, Volume.Value, pricePosition, signal, _lastPrice.ToString());
+            _sec.Positions.BuyAtPrice(bar + 1, volume, pricePosition, signal, _lastPrice.ToString());
         }
 
-        private void TryOpenShort(int bar)
+        private void TryOpenShort(int bar, IList<IPosition> shortPositions)
         {
-            // получаем все шорт позиции
-            var shortPositions = _sec.Positions.GetActiveForBar(bar).ToList().FindAll(pos => pos.IsShort);
-
             // Если шорт позиций нет, то открываем шорт позицию
             if (shortPositions.Count == 0)
             {
@@ -413,8 +422,98 @@ namespace AlligatorTrend
         private void OpenShort(int bar, string signal)
         {
             double pricePosition = _lastPrice - Slippage * _tick;
+            double volume = GetVolume(_sec, bar, pricePosition);
 
-            _sec.Positions.SellAtPrice(bar + 1, Volume, pricePosition, signal, _lastPrice.ToString());
+            _sec.Positions.SellAtPrice(bar + 1, volume, pricePosition, signal, _lastPrice.ToString());
+        }
+
+        /// <summary>
+        /// Получить объем входа в позицию по цене инструмента
+        /// </summary>
+        /// <param name="price"></param>
+        /// <returns></returns>
+        private double GetVolume(ISecurity sec, int bar, double price)
+        {
+            if (sec == null)
+            {
+                _ctx.LogError($"GetVolume: некорректный инструмент");
+                return 0.0;
+            }
+
+            if (bar < 0 || bar > _barsCount)
+            {
+                _ctx.LogError($"GetVolume: некорректный номер бара {bar}");
+                return 0.0;
+            }
+
+            // проверка на корректность переданной цены
+            if (price <= 0)
+            {
+                _ctx.LogError($"GetVolume: некорректная цена {price}");
+                return 0.0;
+            }
+
+            // объем входа в позицию
+            double volume = 0;
+
+            if (OnVolumeFix.Value)
+            {
+                volume = VolumeFix.Value;
+                    
+            }
+            else
+            {
+                // получить размер депозита
+                double depositSize = GetDepositSize(sec, bar);
+
+                volume = depositSize / price * VolumePct.Value / 100.0;
+            }
+
+            // округление до заданного количества знаков после запятой
+            volume = Math.Round(volume, VolumeDecimals.Value);
+
+            return volume;
+        }
+
+        /// <summary>
+        /// Получить размер депозита для заданного бара
+        /// </summary>
+        /// <param name="sec"></param>
+        /// <param name="bar"></param>
+        /// <returns></returns>
+        double GetDepositSize(ISecurity sec, int bar)
+        {
+            if (sec == null)
+                return 0.0;
+
+            if (bar < 0 || bar >= _barsCount)
+                return 0.0;
+
+            // если подключены к реальному счету, то получаем депозит со счета
+            if (sec is ISecurityRt secRt)
+            {
+                return secRt.CurrencyBalance;
+            }
+
+            // начальное значение депозита
+            double deposit = sec.InitDeposit;
+
+            return deposit;
+            
+            // вычисляем текущее значение депозита
+            // не используется в данном роботе
+            foreach (IPosition pos in sec.Positions.GetClosedOrActiveForBar(bar))
+            {
+                if (pos.IsActiveForBar(bar))
+                {
+                    deposit -= pos.EntryPrice * pos.Shares * sec.LotSize;
+                }
+                else
+                {
+                    deposit += pos.Profit();
+                }
+            }
+            return deposit;
         }
 
         /// <summary>
@@ -456,6 +555,7 @@ namespace AlligatorTrend
                 LineStyles.SOLID,
                 PaneSides.RIGHT);
 
+            /*
             var graphSignalLE = pane.AddList("SignalLE",
                 _arrSignalLE,
                 ListStyles.HISTOHRAM,
